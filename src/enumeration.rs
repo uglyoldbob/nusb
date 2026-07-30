@@ -1,5 +1,6 @@
 #[cfg(target_os = "windows")]
 use std::ffi::{OsStr, OsString};
+use std::fmt::Debug;
 
 #[cfg(any(target_os = "linux"))]
 use crate::platform::SysfsPath;
@@ -305,6 +306,23 @@ impl DeviceInfo {
     ///     interfaces.
     pub fn interfaces(&self) -> impl Iterator<Item = &InterfaceInfo> {
         self.interfaces.iter()
+    }
+
+    /// Check whether this device matches a [`DeviceSelector`].
+    pub fn matches(&self, s: &DeviceSelector) -> bool {
+        s.vendor_id.is_none_or(|id| self.vendor_id == id)
+            && s.product_id.is_none_or(|id| self.product_id == id)
+            && s.serial_number
+                .as_ref()
+                .is_none_or(|s| self.serial_number.as_deref() == Some(s))
+            && ((s.class.is_none_or(|c| self.class == c)
+                && s.subclass.is_none_or(|s| self.subclass == s)
+                && s.protocol.is_none_or(|p| self.protocol == p))
+                || self.interfaces().any(|i| {
+                    s.class.is_none_or(|c| i.class == c)
+                        && s.subclass.is_none_or(|s| i.subclass == s)
+                        && s.protocol.is_none_or(|p| i.protocol == p)
+                }))
     }
 
     /// Open the device
@@ -712,6 +730,155 @@ impl std::fmt::Debug for BusInfo {
             .field("controller_type", &self.controller_type)
             .field("driver", &self.driver);
 
+        s.finish()
+    }
+}
+
+/// A filter for matching devices in [`request_device`][crate::request_device].
+///
+/// ## Example
+///
+/// ```no_run
+/// use nusb::{DeviceSelector, MaybeFuture};
+///
+/// let devices = nusb::request_device(&[
+///     DeviceSelector::all().with_vid_pid(0x1234, 0x5678),
+///     DeviceSelector::all().with_vid_pid(0x1111, 0x2222),
+/// ]).wait().unwrap();
+/// ```
+#[derive(Default, Clone)]
+pub struct DeviceSelector {
+    pub(crate) vendor_id: Option<u16>,
+    pub(crate) product_id: Option<u16>,
+    pub(crate) class: Option<u8>,
+    pub(crate) subclass: Option<u8>,
+    pub(crate) protocol: Option<u8>,
+    pub(crate) serial_number: Option<String>,
+}
+
+impl DeviceSelector {
+    /// A selector that matches all devices.
+    pub const fn all() -> DeviceSelector {
+        DeviceSelector {
+            vendor_id: None,
+            product_id: None,
+            class: None,
+            subclass: None,
+            protocol: None,
+            serial_number: None,
+        }
+    }
+
+    /// Narrow the selector to only match devices with the given vendor ID.
+    pub const fn with_vid(mut self, vendor_id: u16) -> DeviceSelector {
+        self.vendor_id = Some(vendor_id);
+        self
+    }
+
+    /// Narrow the selector to only match devices with the given vendor ID and product ID.
+    pub const fn with_vid_pid(mut self, vendor_id: u16, product_id: u16) -> DeviceSelector {
+        self.vendor_id = Some(vendor_id);
+        self.product_id = Some(product_id);
+        self
+    }
+
+    /// Narrow the selector to only match devices with the given class code.
+    pub const fn with_class(mut self, class_code: u8) -> DeviceSelector {
+        self.class = Some(class_code);
+        self
+    }
+
+    /// Narrow the selector to only match devices with the given class and subclass.
+    pub const fn with_class_subclass(
+        mut self,
+        class_code: u8,
+        subclass_code: u8,
+    ) -> DeviceSelector {
+        self.class = Some(class_code);
+        self.subclass = Some(subclass_code);
+        self
+    }
+
+    /// Narrow the selector to only match devices with the given class, subclass, and protocol.
+    pub const fn with_class_subclass_protocol(
+        mut self,
+        class_code: u8,
+        subclass_code: u8,
+        protocol_code: u8,
+    ) -> DeviceSelector {
+        self.class = Some(class_code);
+        self.subclass = Some(subclass_code);
+        self.protocol = Some(protocol_code);
+        self
+    }
+
+    /// Narrow the selector to only match devices with the given serial number.
+    pub fn with_serial_number(mut self, serial_number: String) -> DeviceSelector {
+        self.serial_number = Some(serial_number);
+        self
+    }
+
+    /// Vendor ID, or `None` if not filtered by vendor ID.
+    pub fn vendor_id(&self) -> Option<u16> {
+        self.vendor_id
+    }
+
+    /// Product ID, or `None` if not filtered by product ID.
+    pub fn product_id(&self) -> Option<u16> {
+        self.product_id
+    }
+
+    /// Class code, or `None` if not filtered by class.
+    pub fn class(&self) -> Option<u8> {
+        self.class
+    }
+
+    /// Subclass code, or `None` if not filtered by subclass.
+    pub fn subclass(&self) -> Option<u8> {
+        self.subclass
+    }
+
+    /// Protocol code, or `None` if not filtered by protocol.
+    pub fn protocol(&self) -> Option<u8> {
+        self.protocol
+    }
+
+    /// Serial number, or `None` if not filtered by serial number.
+    pub fn serial_number(&self) -> Option<&str> {
+        self.serial_number.as_deref()
+    }
+}
+
+impl Debug for DeviceSelector {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let DeviceSelector {
+            vendor_id,
+            product_id,
+            class,
+            subclass,
+            protocol,
+            ref serial_number,
+        } = *self;
+
+        let mut s = f.debug_struct("DeviceSelector");
+        if let Some(vendor_id) = vendor_id {
+            s.field("vendor_id", &format_args!("0x{vendor_id:04X}"));
+        }
+        if let Some(product_id) = product_id {
+            s.field("product_id", &format_args!("0x{product_id:04X}"));
+        }
+        if let Some(class) = class {
+            s.field("class", &format_args!("0x{class:02X}"));
+        }
+        if let Some(subclass) = subclass {
+            s.field("subclass", &format_args!("0x{subclass:02X}"));
+        }
+        if let Some(protocol) = protocol {
+            s.field("protocol", &format_args!("0x{protocol:02X}"));
+        }
+        if let Some(ref serial_number) = serial_number {
+            s.field("serial_number", serial_number);
+        }
         s.finish()
     }
 }
