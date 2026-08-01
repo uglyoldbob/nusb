@@ -78,7 +78,12 @@ pub struct DeviceInfo {
     pub(crate) vendor_id: u16,
     pub(crate) product_id: u16,
 
-    #[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))]
+    #[cfg(any(
+        target_os = "linux",
+        target_os = "macos",
+        target_os = "windows",
+        target_arch = "wasm32",
+    ))]
     pub(crate) usb_version: u16,
 
     #[cfg(any(
@@ -99,6 +104,7 @@ pub struct DeviceInfo {
         target_os = "macos",
         target_os = "windows",
         target_os = "android",
+        target_arch = "wasm32",
     ))]
     pub(crate) speed: Option<Speed>,
 
