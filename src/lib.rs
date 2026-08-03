@@ -188,7 +188,7 @@
 //!
 //! ```toml
 //! [target.wasm32-unknown-unknown]
-//! rustflags = "--cfg=web_sys_unstable_apis"
+//! rustflags = ["--cfg=web_sys_unstable_apis"]
 //! ```
 //!
 //! WebUSB requires a user permission request to access a device. Use
