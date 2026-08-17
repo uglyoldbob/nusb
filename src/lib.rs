@@ -206,7 +206,7 @@
 //!
 //! ```toml
 //! [target.wasm32-unknown-unknown]
-//! rustflags = "--cfg=web_sys_unstable_apis"
+//! rustflags = ["--cfg=web_sys_unstable_apis"]
 //! ```
 //!
 //! WebUSB requires a user permission request to access a device. Use
@@ -335,9 +335,8 @@ pub fn request_device(
 ) -> impl MaybeFuture<Output = Result<Option<DeviceInfo>, Error>> + use<'_> {
     #[cfg(not(target_arch = "wasm32"))]
     {
-        list_devices().map(|r| {
-            r.map(|mut devices| devices.find(|dev| selectors.iter().any(|s| dev.matches(s))))
-        })
+        list_devices()
+            .map_ok(|mut devices| devices.find(|dev| selectors.iter().any(|s| dev.matches(s))))
     }
 
     #[cfg(target_arch = "wasm32")]

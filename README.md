@@ -8,10 +8,10 @@ A new pure-Rust library for cross-platform low-level access to USB devices.
 * [Issues](https://github.com/kevinmehall/nusb/issues)
 * [Discussions](https://github.com/kevinmehall/nusb/discussions)
 
-`nusb` supports Windows, macOS, Linux, and Android and provides both async and
-blocking APIs for listing and watching USB devices, reading descriptor
-details, opening and managing devices and interfaces, and performing
-transfers on control, bulk, and interrupt endpoints.
+`nusb` supports Windows, macOS, Linux, Android, and WebUSB and provides both
+async and blocking APIs for listing and watching USB devices, reading descriptor
+details, opening and managing devices and interfaces, and performing transfers
+on control, bulk, and interrupt endpoints.
 
 ### Compared to [rusb](https://docs.rs/rusb/latest/rusb/) and [libusb](https://libusb.info/)
 
