@@ -13,7 +13,7 @@ struct DevInst();
 
 use crate::{Device, Error, MaybeFuture};
 
-/// Opaque device identifier
+/// Opaque device identifier.
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash)]
 pub struct DeviceId(pub(crate) crate::platform::DeviceId);
 
@@ -27,12 +27,13 @@ pub struct DeviceId(pub(crate) crate::platform::DeviceId);
 ///     * Linux: `sysfs_path`, `busnum`
 ///     * Windows: `instance_id`, `parent_instance_id`, `port_number`, `driver`
 ///     * macOS: `registry_id`, `location_id`
+///     * Android: `port_chain`, `usb_version`, `bus_id`, `device_address`, `speed` are unavailable
 #[derive(Clone)]
 pub struct DeviceInfo {
     #[cfg(target_os = "linux")]
     pub(crate) path: SysfsPath,
 
-    #[cfg(any(target_os = "linux", target_os = "android"))]
+    #[cfg(target_os = "linux")]
     pub(crate) busnum: u8,
 
     #[cfg(target_os = "windows")]
@@ -53,6 +54,9 @@ pub struct DeviceInfo {
     #[cfg(target_os = "windows")]
     pub(crate) driver: Option<String>,
 
+    #[cfg(target_os = "android")]
+    pub(crate) jni_global_ref: crate::platform::JniGlobal,
+
     #[cfg(target_os = "macos")]
     pub(crate) registry_id: u64,
 
@@ -62,13 +66,11 @@ pub struct DeviceInfo {
     #[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows",))]
     pub(crate) bus_id: String,
 
-    #[cfg(any(
-        target_os = "linux",
-        target_os = "macos",
-        target_os = "windows",
-        target_os = "android",
-    ))]
+    #[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows",))]
     pub(crate) device_address: u8,
+
+    #[cfg(target_os = "android")]
+    pub(crate) device_id: i32,
 
     #[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))]
     pub(crate) port_chain: Vec<u8>,
@@ -82,19 +84,15 @@ pub struct DeviceInfo {
         target_os = "windows",
         target_arch = "wasm32"
     ))]
+    pub(crate) usb_version: u16,
+
     pub(crate) device_version: u16,
 
-    pub(crate) usb_version: u16,
     pub(crate) class: u8,
     pub(crate) subclass: u8,
     pub(crate) protocol: u8,
 
-    #[cfg(any(
-        target_os = "linux",
-        target_os = "macos",
-        target_os = "windows",
-        target_os = "android",
-    ))]
+    #[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))]
     pub(crate) speed: Option<Speed>,
 
     pub(crate) manufacturer_string: Option<String>,
@@ -115,7 +113,7 @@ impl DeviceInfo {
             DeviceId(self.devinst)
         }
 
-        #[cfg(any(target_os = "linux", target_os = "android"))]
+        #[cfg(target_os = "linux")]
         {
             DeviceId(crate::platform::DeviceId {
                 bus: self.busnum,
@@ -126,6 +124,11 @@ impl DeviceInfo {
         #[cfg(target_os = "macos")]
         {
             DeviceId(self.registry_id)
+        }
+
+        #[cfg(target_os = "android")]
+        {
+            DeviceId(self.device_id)
         }
 
         #[cfg(target_arch = "wasm32")]
@@ -179,6 +182,8 @@ impl DeviceInfo {
     ///
     /// Since USB SuperSpeed is a separate topology from USB 2.0 speeds, a
     /// physical port may be identified differently depending on speed.
+    ///
+    /// *Not available on Android and WebUSB*
     #[cfg(any(
         docsrs,
         target_os = "linux",
@@ -208,6 +213,8 @@ impl DeviceInfo {
     }
 
     /// Identifier for the bus / host controller where the device is connected.
+    ///
+    /// *Not available on Android and WebUSB*
     #[cfg(any(
         docsrs,
         target_os = "linux",
@@ -219,6 +226,8 @@ impl DeviceInfo {
     }
 
     /// Number identifying the device within the bus.
+    ///
+    /// *Not available on Android and WebUSB*
     #[cfg(any(
         docsrs,
         target_os = "linux",
@@ -242,20 +251,24 @@ impl DeviceInfo {
     }
 
     /// The device version, normally encoded as BCD, from the `bcdDevice` device descriptor field.
+    ///
+    /// ### Platform-specific notes
+    /// * Android: This always returns 0xFFFF on Android 8.x and lower versions.
     #[doc(alias = "bcdDevice")]
-    #[cfg(any(
-        docsrs,
-        target_os = "linux",
-        target_os = "macos",
-        target_os = "windows",
-        target_arch = "wasm32"
-    ))]
     pub fn device_version(&self) -> u16 {
         self.device_version
     }
 
     /// Encoded version of the USB specification, from the `bcdUSB` device descriptor field.
+    ///
+    /// *Not available on Android*
     #[doc(alias = "bcdUSB")]
+    #[cfg(any(
+        target_os = "linux",
+        target_os = "macos",
+        target_os = "windows",
+        target_arch = "wasm32"
+    ))]
     pub fn usb_version(&self) -> u16 {
         self.usb_version
     }
@@ -280,7 +293,9 @@ impl DeviceInfo {
         self.protocol
     }
 
-    /// Connection speed
+    /// Connection speed.
+    ///
+    /// *Not available on Android and WebUSB*
     #[cfg(any(
         docsrs,
         target_os = "linux",
@@ -308,6 +323,16 @@ impl DeviceInfo {
     }
 
     /// Serial number string, if available without device IO.
+    ///
+    /// ### Platform-specific notes
+    /// * Android: Starting from Android 10, reading the serial number requires
+    ///   permission, and will only be available if the device has been opened
+    ///   after the user has approved the permission request, or the current
+    ///   application has been started by the user after the system suggested
+    ///   starting it on an USB device connection event according to the
+    ///   application's USB device filter. For the first case, please call
+    ///   [crate::list_devices] and find the [DeviceInfo] of the device again
+    ///   after opening the device in order to get the serial number.
     #[doc(alias = "iSerial")]
     pub fn serial_number(&self) -> Option<&str> {
         self.serial_number.as_deref()
@@ -352,7 +377,16 @@ impl DeviceInfo {
                 }))
     }
 
-    /// Open the device
+    /// Opens the device.
+    ///
+    /// ### Platform-specific notes
+    ///
+    /// * On Android, a permission request will be performed if the permission has not been granted:
+    ///   - The permission dialog will be shown, waiting for user interaction; the current Android
+    ///     activity may be paused by this call and resumed on receiving the response.
+    ///   - An error of `ErrorKind::PermissionDenied` is returned if the user refuses the request.
+    ///   - Avoid blocking on this with [MaybeFuture::wait] in the UI thread or the native-side
+    ///     main event thread of the native activity; doing so may get blocked forever.
     pub fn open(&self) -> impl MaybeFuture<Output = Result<Device, Error>> {
         Device::open(self)
     }
@@ -369,22 +403,22 @@ impl std::fmt::Debug for DeviceInfo {
             .field("port_chain", &format_args!("{:?}", self.port_chain))
             .field("speed", &self.speed);
 
+        #[cfg(target_os = "android")]
+        {
+            s.field("device_id", &self.device_id);
+        }
+
         s.field("vendor_id", &format_args!("0x{:04X}", self.vendor_id))
-            .field("product_id", &format_args!("0x{:04X}", self.product_id));
+            .field("product_id", &format_args!("0x{:04X}", self.product_id))
+            .field(
+                "device_version",
+                &format_args!("0x{:04X}", self.device_version),
+            );
 
-        #[cfg(any(
-            target_os = "linux",
-            target_os = "macos",
-            target_os = "windows",
-            target_arch = "wasm32"
-        ))]
-        s.field(
-            "device_version",
-            &format_args!("0x{:04X}", self.device_version),
-        );
+        #[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))]
+        s.field("usb_version", &format_args!("0x{:04X}", self.usb_version));
 
-        s.field("usb_version", &format_args!("0x{:04X}", self.usb_version))
-            .field("class", &format_args!("0x{:02X}", self.class))
+        s.field("class", &format_args!("0x{:02X}", self.class))
             .field("subclass", &format_args!("0x{:02X}", self.subclass))
             .field("protocol", &format_args!("0x{:02X}", self.protocol))
             .field("manufacturer_string", &self.manufacturer_string)

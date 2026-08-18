@@ -175,6 +175,24 @@
 //! }
 //! ```
 //!
+//! ### Android
+//!
+//! `nusb` uses the Android `UsbManager` API via JNI for listing and opening
+//! devices. The Linux usbfs backend is then used once a device is opened.
+//!
+//! The Android application must have the `android.hardware.usb.host` feature.
+//! [Opening a device][DeviceInfo::open] requires user permission and may
+//! prompt the user if necessary.
+//!
+//! Please make sure the [ndk-context] is configured correctly, unless you have a
+//! native activity application based on [android-activity] or a similar glue crate.
+//! See <https://cjycode.com/flutter_rust_bridge/guides/how-to/ndk-init>.
+//!
+//! Note that a few fields are not available in [DeviceInfo].
+//!
+//! [android-activity]: https://docs.rs/android-activity
+//! [ndk-context]: https://docs.rs/ndk-context
+//!
 //! ### WebUSB
 //!
 //! `nusb` can be used from WebAssembly in browsers with [WebUSB] support.
@@ -242,6 +260,7 @@ pub mod transfer;
     target_os = "linux",
     target_os = "macos",
     target_os = "windows",
+    target_os = "android",
     target_arch = "wasm32"
 ))]
 pub mod hotplug;
@@ -271,6 +290,7 @@ pub use error::{ActiveConfigurationError, Error, ErrorKind, GetDescriptorError};
     target_os = "linux",
     target_os = "macos",
     target_os = "windows",
+    target_os = "android",
     target_arch = "wasm32"
 ))]
 pub fn list_devices() -> impl MaybeFuture<Output = Result<impl Iterator<Item = DeviceInfo>, Error>>
@@ -394,6 +414,7 @@ pub fn list_buses() -> impl MaybeFuture<Output = Result<impl Iterator<Item = Bus
     target_os = "linux",
     target_os = "macos",
     target_os = "windows",
+    target_os = "android",
     target_arch = "wasm32"
 ))]
 pub fn watch_devices() -> Result<hotplug::HotplugWatch, Error> {

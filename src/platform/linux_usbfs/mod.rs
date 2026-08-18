@@ -18,6 +18,12 @@ mod hotplug;
 #[cfg(not(target_os = "android"))]
 pub(crate) use hotplug::LinuxHotplugWatch as HotplugWatch;
 
+#[cfg(target_os = "android")]
+mod android;
+
+#[cfg(target_os = "android")]
+pub(crate) use android::{list_devices, open_device, DeviceId, HotplugWatch, JniGlobal};
+
 mod events;
 
 mod device;
@@ -28,6 +34,7 @@ pub(crate) use device::LinuxInterface as Interface;
 use crate::transfer::TransferError;
 use crate::ErrorKind;
 
+#[cfg(not(target_os = "android"))]
 #[derive(Copy, Clone, Debug, Hash, PartialEq, Eq)]
 pub struct DeviceId {
     pub(crate) bus: u8,

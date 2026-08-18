@@ -111,11 +111,13 @@ fn event_loop() {
 
 static WAKERS: Mutex<Slab<Option<Waker>>> = Mutex::new(Slab::new());
 
+#[cfg_attr(target_os = "android", allow(unused))]
 pub(crate) struct Async<T: AsFd> {
     pub(crate) inner: T,
     id: usize,
 }
 
+#[cfg_attr(target_os = "android", allow(unused))]
 impl<T: AsFd> Async<T> {
     pub fn new(inner: T) -> Result<Self, Error> {
         let id = WAKERS.lock().unwrap().insert(None);
